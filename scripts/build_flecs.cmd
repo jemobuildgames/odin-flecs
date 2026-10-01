@@ -40,3 +40,9 @@ rem library links cleanly with Odin). /Z7 embeds debug info in the .lib itself.
 cl /nologo /c /Od /Z7 /DFLECS_DEBUG /I "%ROOT%\flecs\distr" "%ROOT%\flecs\distr\flecs.c" /Fo"%ROOT%\build\flecs_d.obj" || exit /b 1
 lib /nologo /OUT:"%ROOT%\flecs_d.lib" "%ROOT%\build\flecs_d.obj" || exit /b 1
 echo Built "%ROOT%\flecs_d.lib"
+
+rem --- sanitize ("debug++") -----------------------------------------------------
+rem FLECS_SANITIZE implies FLECS_DEBUG and enables expensive checks.
+cl /nologo /c /Od /Z7 /DFLECS_SANITIZE /I "%ROOT%\flecs\distr" "%ROOT%\flecs\distr\flecs.c" /Fo"%ROOT%\build\flecs_sanitize.obj" || exit /b 1
+lib /nologo /OUT:"%ROOT%\flecs_sanitize.lib" "%ROOT%\build\flecs_sanitize.obj" || exit /b 1
+echo Built "%ROOT%\flecs_sanitize.lib"

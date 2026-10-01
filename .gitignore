@@ -10,9 +10,10 @@
 *.dylib
 *.exp
 
-# The prebuilt release/debug libraries are shipped with the bindings.
+# The prebuilt release/debug/sanitize libraries are shipped with the bindings.
 !flecs.lib
 !flecs_d.lib
+!flecs_sanitize.lib
 
 build/
 

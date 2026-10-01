@@ -4,7 +4,7 @@ Unofficial [Odin](https://odin-lang.org/) bindings for the [Flecs](https://www.f
 generated with [odin-c-bindgen](https://github.com/karl-zylinski/odin-c-bindgen).
 
 - Flecs version: `4.1.6` (pinned in the [`flecs`](flecs) submodule)
-- Libraries: `flecs.lib` (release) and `flecs_d.lib` (debug), both x64 static libraries
+- Libraries: `flecs.lib` (release), `flecs_d.lib` (debug) and `flecs_sanitize.lib` (debug++), all x64 static libraries
 - Latest tested Odin version: `dev-2026-09-nightly:a2fb372`
 - Platform: Windows (x64)
 
@@ -15,31 +15,33 @@ generated with [odin-c-bindgen](https://github.com/karl-zylinski/odin-c-bindgen)
 | `flecs.odin` | The generated Odin bindings (`package flecs`). |
 | `flecs.lib` | Prebuilt release static library, so you do not need MSVC to use the bindings. |
 | `flecs_d.lib` | Prebuilt debug static library (`FLECS_DEBUG`). Linked automatically with `-debug`. |
+| `flecs_sanitize.lib` | Prebuilt "debug++" static library (`FLECS_SANITIZE`). Linked with `-define:FLECS_SANITIZE=true`. |
 | `bindgen.sjson` | odin-c-bindgen configuration (release). |
 | `bindgen_debug.sjson` | odin-c-bindgen configuration (debug), used for the debug struct layouts. |
-| `bindgen/imports.odin` | Library import snippet that selects `flecs.lib` / `flecs_d.lib`. |
+| `bindgen_sanitize.sjson` | odin-c-bindgen configuration (sanitize), used for the sanitize-only struct layouts. |
+| `bindgen/imports.odin` | Library import snippet that selects the library for the current build. |
 | `flecs/` | Submodule: the Flecs C library, pinned to tag `v4.1.6`. |
 | `odin-c-bindgen/` | Submodule: the binding generator (fork of odin-c-bindgen). |
 | `patches/` | Patch that is applied to the generator before building it (see below). |
-| `example/` | Small example that creates a world, registers a component and iterates. |
+| `example/` | Example that creates a world, registers a component and shows the layout selection. |
 | `scripts/` | Scripts to build the generator, regenerate the bindings and build the libraries. |
 
 ## How to use
 
-1. Copy the bindings and the library into your project. Prebuilt `flecs.lib` (release) and
-   `flecs_d.lib` (debug) are included, so this step is optional - only run it if you want to
-   rebuild the libraries yourself:
+1. Copy the bindings and the library into your project. Prebuilt `flecs.lib` (release),
+   `flecs_d.lib` (debug) and `flecs_sanitize.lib` (debug++) are included, so this step is
+   optional - only run it if you want to rebuild the libraries yourself:
 
    ```cmd
    scripts\build_flecs.cmd
    ```
 
-   This compiles `flecs/distr/flecs.c` twice (release and debug) with the MSVC C++ tools and
-   writes `flecs.lib` / `flecs_d.lib` next to `flecs.odin`.
+   This compiles `flecs/distr/flecs.c` three times with the MSVC C++ tools and writes the
+   libraries next to `flecs.odin`.
 
 2. Copy `flecs.odin` and the library you want into your project (or add this repository as a
-   submodule), then import it. Pass `-debug` to Odin to link `flecs_d.lib`; the bindings select
-   the library and the matching debug struct layouts automatically.
+   submodule), then import it. The bindings select the library that matches the build flags
+   (`-debug`, `-define:FLECS_SANITIZE=true`) and use the matching struct layouts automatically.
 
    ```odin
    import flecs "../odin-flecs"
@@ -75,20 +77,74 @@ pos_id := flecs.ecs_component_init(world, &flecs.ecs_component_desc_t{
 })
 ```
 
+## Release, debug and debug++
+
+Flecs is shipped in three flavours. The bindings pick the matching library and struct layouts
+from the Odin build flags:
+
+| Odin flags | Library | Flecs config |
+| --- | --- | --- |
+| (none) | `flecs.lib` | `FLECS_NDEBUG` (release) |
+| `-debug` | `flecs_d.lib` | `FLECS_DEBUG` |
+| `-define:FLECS_SANITIZE=true` | `flecs_sanitize.lib` | `FLECS_SANITIZE` (implies `FLECS_DEBUG`) |
+
+```cmd
+rem release
+odin run example
+
+rem debug
+odin run example -debug
+
+rem debug++ (sanitize)
+odin run example -define:FLECS_SANITIZE=true
+```
+
+`FLECS_SANITIZE` is Flecs' "debug++" mode: it implies `FLECS_DEBUG` and adds expensive checks
+(such as tracking outstanding allocations). It is slower but catches more mistakes.
+
+[`example/example.odin`](example/example.odin) prints the selected layout, including `ecs_ref_t`
+(which is returned by value, so a layout mismatch would corrupt the stack):
+
+```text
+# odin run example
+ODIN_DEBUG                    = false
+FLECS_SANITIZE                = false
+size_of(ecs_ref_t)            = 32
+size_of(ecs_map_t)            = 32
+size_of(ecs_vec_t)            = 16
+size_of(ecs_block_allocator_t)= 32
+
+# odin run example -debug
+ODIN_DEBUG                    = true
+FLECS_SANITIZE                = false
+size_of(ecs_ref_t)            = 40
+size_of(ecs_map_t)            = 48
+size_of(ecs_vec_t)            = 16
+size_of(ecs_block_allocator_t)= 32
+
+# odin run example -define:FLECS_SANITIZE=true
+ODIN_DEBUG                    = false
+FLECS_SANITIZE                = true
+size_of(ecs_ref_t)            = 40
+size_of(ecs_map_t)            = 48
+size_of(ecs_vec_t)            = 32
+size_of(ecs_block_allocator_t)= 48
+```
+
 ## Regenerating the bindings
 
 ```cmd
 scripts\generate.cmd
 ```
 
-This builds `odin-c-bindgen` into `build\bindgen.exe` (if needed), generates the bindings twice
-(release with `bindgen.sjson`, debug with `bindgen_debug.sjson`) and merges the debug-only struct
-layouts into `flecs.odin` behind `when ODIN_DEBUG`.
+This builds `odin-c-bindgen` into `build\bindgen.exe` (if needed), generates the bindings three
+times (`bindgen.sjson`, `bindgen_debug.sjson`, `bindgen_sanitize.sjson`) and merges the
+variant-specific struct layouts into `flecs.odin` behind `when FLECS_SANITIZE` / `when ODIN_DEBUG`.
 
 Requirements:
 
 - Odin on `PATH`.
-- Python 3 on `PATH` (for the merge step in `scripts\merge_debug_structs.py`).
+- Python 3 on `PATH` (for the merge step in `scripts\merge_build_variants.py`).
 - libclang `16` or newer. `libclang.dll` must be on `PATH` (or `LIBCLANG_PATH` must point at the
   folder containing it), together with `libclang.lib` in the sibling `lib` folder - this is the
   layout of the official LLVM/Clang Windows builds.
@@ -173,17 +229,19 @@ Library build flags (see `scripts\build_flecs.cmd`):
 | --- | --- |
 | `flecs.lib` | `/c /O2 /DNDEBUG` then `lib` - release, `FLECS_NDEBUG`, static CRT |
 | `flecs_d.lib` | `/c /Od /Z7 /DFLECS_DEBUG` then `lib` - debug, `FLECS_DEBUG`, debug info embedded in the `.lib` |
+| `flecs_sanitize.lib` | `/c /Od /Z7 /DFLECS_SANITIZE` then `lib` - debug++, `FLECS_SANITIZE`, debug info embedded in the `.lib` |
 
-Both are MSVC x64 static libraries (COFF) that are linked statically into the final executable -
-there is no `flecs.dll`.
+All three are MSVC x64 static libraries (COFF) that are linked statically into the final
+executable - there is no `flecs.dll`.
 
 ## Notes
 
-- `flecs.lib` is a release build (`FLECS_NDEBUG`); `flecs_d.lib` is a debug build (`FLECS_DEBUG`).
-  The debug build changes the layout of 5 structs (`ecs_ref_t`, `ecs_map_t`, `ecs_map_iter_t`,
-  `ecs_stack_t`, `ecs_stack_cursor_t`) by appending debug-only fields. Those structs are therefore
-  emitted twice in `flecs.odin`, guarded by `when ODIN_DEBUG`, so a single bindings file matches
-  both libraries correctly (see `scripts\merge_debug_structs.py`).
+- The three builds change the layout of 7 structs in total, by appending fields:
+  - debug: `ecs_ref_t`, `ecs_map_t`, `ecs_map_iter_t`, `ecs_stack_t`, `ecs_stack_cursor_t`;
+  - sanitize (in addition): `ecs_vec_t`, `ecs_block_allocator_t`.
+  Those structs are emitted with `when FLECS_SANITIZE` / `when ODIN_DEBUG` blocks in `flecs.odin`,
+  so a single bindings file matches all three libraries correctly (see
+  `scripts\merge_build_variants.py`).
 - Function and type names keep their `ecs_` / `Ecs` prefixes so they match the C API and its
   documentation.
 
