@@ -1,0 +1,19 @@
+diff --git a/src/translate_collect.odin b/src/translate_collect.odin
+index 5fa3007..525235b 100644
+--- a/src/translate_collect.odin
++++ b/src/translate_collect.odin
+@@ -890,6 +890,14 @@ create_type_recursive :: proc(ct: clang.Type, tcs: ^Translate_Collect_State) ->
+ 	// Structs and raw unions
+ 	case .Record:
+ 		c := clang.getTypeDeclaration(ct)
++
++		// If the record is only forward declared here, but defined elsewhere (e.g. `typedef struct
++		// X X;` before `struct X { ... }`), use the definition cursor so the fields are picked
++		// up. Without this the type would be emitted as an empty struct.
++		if definition := clang.getCursorDefinition(c); clang.Cursor_isNull(definition) == 0 {
++			c = definition
++		}
++
+ 		struct_type_idx := reserve_type(ct, tcs)
+ 		struct_children := tcs.children_lookup[c]
+ 		fields: [dynamic]Type_Struct_Field

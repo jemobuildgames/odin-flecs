@@ -1,0 +1,7 @@
+[submodule "odin-c-bindgen"]
+	path = odin-c-bindgen
+	url = git@github.com:jemobuildgames/odin-c-bindgen.git
+	branch = main
+[submodule "flecs"]
+	path = flecs
+	url = git@github.com:jemobuildgames/flecs.git
