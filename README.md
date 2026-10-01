@@ -12,6 +12,7 @@ generated with [odin-c-bindgen](https://github.com/karl-zylinski/odin-c-bindgen)
 | Path | Description |
 | --- | --- |
 | `flecs.odin` | The generated Odin bindings (`package flecs`). |
+| `flecs.lib` | Prebuilt release static library, so you do not need MSVC to use the bindings. |
 | `bindgen.sjson` | odin-c-bindgen configuration. |
 | `flecs/` | Submodule: the Flecs C library, pinned to tag `v4.1.6`. |
 | `odin-c-bindgen/` | Submodule: the binding generator (fork of odin-c-bindgen). |
@@ -21,7 +22,8 @@ generated with [odin-c-bindgen](https://github.com/karl-zylinski/odin-c-bindgen)
 
 ## How to use
 
-1. Build the Flecs static library:
+1. Copy the bindings and the library into your project. A prebuilt release `flecs.lib` is
+   included, so this step is optional - only run it if you want to rebuild the library yourself:
 
    ```cmd
    scripts\build_flecs.cmd

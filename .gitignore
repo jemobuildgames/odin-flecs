@@ -10,6 +10,9 @@
 *.dylib
 *.exp
 
+# The prebuilt release library is shipped with the bindings.
+!flecs.lib
+
 build/
 
 # Editor / tooling
