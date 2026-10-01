@@ -1,0 +1,29 @@
+// Bindgen configuration for the debug (FLECS_DEBUG) flavour of Flecs.
+//
+// This is only used by `scripts\generate.cmd` to collect the debug-only struct layouts, which
+// are merged into `flecs.odin` behind `when ODIN_DEBUG`. See `bindgen.sjson` for comments.
+
+inputs = [
+	"flecs/distr/flecs.h",
+]
+
+output_folder = "build/flecs_debug"
+imports_file = "bindgen/imports.odin"
+package_name = "flecs"
+
+// Generate against a debug build of Flecs (extra debug-only fields in a few structs).
+clang_defines = {
+	"FLECS_DEBUG" = "1",
+}
+
+procedures_at_end = true
+
+remove = [
+	"FLECS_STACK_PAGE_OFFSET",
+	"FLECS_STACK_PAGE_SIZE",
+	"ECS_ROW_FLAGS_MASK",
+	"ECS_COMPONENT_MASK",
+	"ECS_STRBUF_INIT",
+	"ECS_HTTP_REPLY_INIT",
+	"ECS_MAX_COMPONENT_ID",
+]

@@ -4,6 +4,7 @@ Unofficial [Odin](https://odin-lang.org/) bindings for the [Flecs](https://www.f
 generated with [odin-c-bindgen](https://github.com/karl-zylinski/odin-c-bindgen).
 
 - Flecs version: `4.1.6` (pinned in the [`flecs`](flecs) submodule)
+- Libraries: `flecs.lib` (release) and `flecs_d.lib` (debug), both x64 static libraries
 - Latest tested Odin version: `dev-2026-09-nightly:a2fb372`
 - Platform: Windows (x64)
 
@@ -13,27 +14,32 @@ generated with [odin-c-bindgen](https://github.com/karl-zylinski/odin-c-bindgen)
 | --- | --- |
 | `flecs.odin` | The generated Odin bindings (`package flecs`). |
 | `flecs.lib` | Prebuilt release static library, so you do not need MSVC to use the bindings. |
-| `bindgen.sjson` | odin-c-bindgen configuration. |
+| `flecs_d.lib` | Prebuilt debug static library (`FLECS_DEBUG`). Linked automatically with `-debug`. |
+| `bindgen.sjson` | odin-c-bindgen configuration (release). |
+| `bindgen_debug.sjson` | odin-c-bindgen configuration (debug), used for the debug struct layouts. |
+| `bindgen/imports.odin` | Library import snippet that selects `flecs.lib` / `flecs_d.lib`. |
 | `flecs/` | Submodule: the Flecs C library, pinned to tag `v4.1.6`. |
 | `odin-c-bindgen/` | Submodule: the binding generator (fork of odin-c-bindgen). |
 | `patches/` | Patch that is applied to the generator before building it (see below). |
 | `example/` | Small example that creates a world, registers a component and iterates. |
-| `scripts/` | Scripts to build the generator, regenerate the bindings and build `flecs.lib`. |
+| `scripts/` | Scripts to build the generator, regenerate the bindings and build the libraries. |
 
 ## How to use
 
-1. Copy the bindings and the library into your project. A prebuilt release `flecs.lib` is
-   included, so this step is optional - only run it if you want to rebuild the library yourself:
+1. Copy the bindings and the library into your project. Prebuilt `flecs.lib` (release) and
+   `flecs_d.lib` (debug) are included, so this step is optional - only run it if you want to
+   rebuild the libraries yourself:
 
    ```cmd
    scripts\build_flecs.cmd
    ```
 
-   This compiles `flecs/distr/flecs.c` with the MSVC C++ tools and writes `flecs.lib` next to
-   `flecs.odin`.
+   This compiles `flecs/distr/flecs.c` twice (release and debug) with the MSVC C++ tools and
+   writes `flecs.lib` / `flecs_d.lib` next to `flecs.odin`.
 
-2. Copy `flecs.odin` and `flecs.lib` into your project (or add this repository as a submodule),
-   then import it:
+2. Copy `flecs.odin` and the library you want into your project (or add this repository as a
+   submodule), then import it. Pass `-debug` to Odin to link `flecs_d.lib`; the bindings select
+   the library and the matching debug struct layouts automatically.
 
    ```odin
    import flecs "../odin-flecs"
@@ -75,12 +81,14 @@ pos_id := flecs.ecs_component_init(world, &flecs.ecs_component_desc_t{
 scripts\generate.cmd
 ```
 
-This builds `odin-c-bindgen` into `build\bindgen.exe` (if needed) and runs it with
-`bindgen.sjson`, overwriting `flecs.odin`.
+This builds `odin-c-bindgen` into `build\bindgen.exe` (if needed), generates the bindings twice
+(release with `bindgen.sjson`, debug with `bindgen_debug.sjson`) and merges the debug-only struct
+layouts into `flecs.odin` behind `when ODIN_DEBUG`.
 
 Requirements:
 
 - Odin on `PATH`.
+- Python 3 on `PATH` (for the merge step in `scripts\merge_debug_structs.py`).
 - libclang `16` or newer. `libclang.dll` must be on `PATH` (or `LIBCLANG_PATH` must point at the
   folder containing it), together with `libclang.lib` in the sibling `lib` folder - this is the
   layout of the official LLVM/Clang Windows builds.
@@ -145,11 +153,37 @@ submodule, so it never shows up as modified. If the patch no longer applies afte
 submodule, rebase it - or delete `patches/` and the apply block in the script once the fix lands
 upstream.
 
+## Toolchain
+
+The prebuilt libraries and bindings were produced with:
+
+| Tool | Version |
+| --- | --- |
+| Odin | `dev-2026-09-nightly:a2fb372` |
+| MSVC C/C++ compiler (`cl.exe`) | `19.51.36260` for x64 |
+| MSVC linker (`link.exe`) | `14.51.36260.0` |
+| MSVC library manager (`lib.exe`) | `14.51.36260.0` |
+| Visual Studio Build Tools | `18.10.3` (installation `18.10.12224.181`, MSVC toolset `14.51.36231`) |
+| Windows SDK | `10.0.26100.0` |
+| libclang (generator only) | `23.1.2` (any version `>= 16` works) |
+
+Library build flags (see `scripts\build_flecs.cmd`):
+
+| Library | Flags |
+| --- | --- |
+| `flecs.lib` | `/c /O2 /DNDEBUG` then `lib` - release, `FLECS_NDEBUG`, static CRT |
+| `flecs_d.lib` | `/c /Od /Z7 /DFLECS_DEBUG` then `lib` - debug, `FLECS_DEBUG`, debug info embedded in the `.lib` |
+
+Both are MSVC x64 static libraries (COFF) that are linked statically into the final executable -
+there is no `flecs.dll`.
+
 ## Notes
 
-- The bindings are generated with a release configuration (`FLECS_NDEBUG`), so the struct
-  layouts match a release build of Flecs. If you build Flecs in debug mode you must regenerate the
-  bindings with the `FLECS_NDEBUG` define removed from `bindgen.sjson`.
+- `flecs.lib` is a release build (`FLECS_NDEBUG`); `flecs_d.lib` is a debug build (`FLECS_DEBUG`).
+  The debug build changes the layout of 5 structs (`ecs_ref_t`, `ecs_map_t`, `ecs_map_iter_t`,
+  `ecs_stack_t`, `ecs_stack_cursor_t`) by appending debug-only fields. Those structs are therefore
+  emitted twice in `flecs.odin`, guarded by `when ODIN_DEBUG`, so a single bindings file matches
+  both libraries correctly (see `scripts\merge_debug_structs.py`).
 - Function and type names keep their `ecs_` / `Ecs` prefixes so they match the C API and its
   documentation.
 

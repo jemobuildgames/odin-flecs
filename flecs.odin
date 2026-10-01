@@ -4,8 +4,17 @@ package flecs
 import "core:c/libc"
 import "core:c"
 
-foreign import lib "flecs.lib"
-_ :: lib
+// Library selection for the generated bindings.
+//
+// Flecs is shipped as both a release and a debug build. The debug build (FLECS_DEBUG) changes
+// the layout of a few structs, so `flecs.odin` also switches those struct definitions with
+// `when ODIN_DEBUG`. Keep the two in sync: pass `-debug` to Odin to use `flecs_d.lib`.
+when ODIN_DEBUG {
+	foreign import lib "flecs_d.lib"
+} else {
+	foreign import lib "flecs.lib"
+}
+
 
 /**
 * @defgroup c C API
@@ -418,18 +427,37 @@ ecs_stack_page_t :: struct {
 }
 
 /** Cursor that marks a position in the stack allocator for later restoration. */
-ecs_stack_cursor_t :: struct {
-	prev:    ^ecs_stack_cursor_t, /**< Previous cursor in the stack. */
-	page:    ^ecs_stack_page_t,   /**< Page at the cursor position. */
-	sp:      i16,                 /**< Stack pointer at the cursor position. */
-	is_free: bool,                /**< Whether this cursor has been freed. */
+when ODIN_DEBUG {
+	ecs_stack_cursor_t :: struct {
+		prev:    ^ecs_stack_cursor_t, /**< Previous cursor in the stack. */
+		page:    ^ecs_stack_page_t,   /**< Page at the cursor position. */
+		sp:      i16,                 /**< Stack pointer at the cursor position. */
+		is_free: bool,                /**< Whether this cursor has been freed. */
+		owner:   ^ecs_stack_t,        /**< Stack allocator that owns this cursor (debug only). */
+	}
+} else {
+	ecs_stack_cursor_t :: struct {
+		prev:    ^ecs_stack_cursor_t, /**< Previous cursor in the stack. */
+		page:    ^ecs_stack_page_t,   /**< Page at the cursor position. */
+		sp:      i16,                 /**< Stack pointer at the cursor position. */
+		is_free: bool,                /**< Whether this cursor has been freed. */
+	}
 }
 
 /** Stack allocator for quick allocation of small temporary values. */
-ecs_stack_t :: struct {
-	first:       ^ecs_stack_page_t,   /**< First page in the stack. */
-	tail_page:   ^ecs_stack_page_t,   /**< Current tail page. */
-	tail_cursor: ^ecs_stack_cursor_t, /**< Current tail cursor. */
+when ODIN_DEBUG {
+	ecs_stack_t :: struct {
+		first:        ^ecs_stack_page_t,   /**< First page in the stack. */
+		tail_page:    ^ecs_stack_page_t,   /**< Current tail page. */
+		tail_cursor:  ^ecs_stack_cursor_t, /**< Current tail cursor. */
+		cursor_count: i32,                 /**< Number of active cursors (debug only). */
+	}
+} else {
+	ecs_stack_t :: struct {
+		first:       ^ecs_stack_page_t,   /**< First page in the stack. */
+		tail_page:   ^ecs_stack_page_t,   /**< Current tail page. */
+		tail_cursor: ^ecs_stack_cursor_t, /**< Current tail cursor. */
+	}
 }
 
 /** Data type for map key-value storage. */
@@ -454,20 +482,42 @@ ecs_bucket_t :: struct {
 }
 
 /** A hashmap data structure. */
-ecs_map_t :: struct {
-	buckets:      ^ecs_bucket_t,    /**< Array of hash buckets. */
-	bucket_count: i32,              /**< Total number of buckets. */
-	count:        u32,              /**< Number of elements in the map. */
-	bucket_shift: u32,              /**< Bit shift for bucket index computation. */
-	allocator:    ^ecs_allocator_t, /**< Allocator used for memory management. */
+when ODIN_DEBUG {
+	ecs_map_t :: struct {
+		buckets:       ^ecs_bucket_t,    /**< Array of hash buckets. */
+		bucket_count:  i32,              /**< Total number of buckets. */
+		count:         u32,              /**< Number of elements in the map. */
+		bucket_shift:  u32,              /**< Bit shift for bucket index computation. */
+		allocator:     ^ecs_allocator_t, /**< Allocator used for memory management. */
+		change_count:  i32,              /**< Track modifications while iterating. */
+		last_iterated: ecs_map_key_t,    /**< Currently iterated element. */
+	}
+} else {
+	ecs_map_t :: struct {
+		buckets:      ^ecs_bucket_t,    /**< Array of hash buckets. */
+		bucket_count: i32,              /**< Total number of buckets. */
+		count:        u32,              /**< Number of elements in the map. */
+		bucket_shift: u32,              /**< Bit shift for bucket index computation. */
+		allocator:    ^ecs_allocator_t, /**< Allocator used for memory management. */
+	}
 }
 
 /** Iterator for traversing map contents. */
-ecs_map_iter_t :: struct {
-	_map:   ^ecs_map_t,          /**< The map being iterated. */
-	bucket: ^ecs_bucket_t,       /**< Current bucket. */
-	entry:  ^ecs_bucket_entry_t, /**< Current entry in the bucket. */
-	res:    ^ecs_map_data_t,     /**< Pointer to current key-value pair. */
+when ODIN_DEBUG {
+	ecs_map_iter_t :: struct {
+		_map:         ^ecs_map_t,          /**< The map being iterated. */
+		bucket:       ^ecs_bucket_t,       /**< Current bucket. */
+		entry:        ^ecs_bucket_entry_t, /**< Current entry in the bucket. */
+		res:          ^ecs_map_data_t,     /**< Pointer to current key-value pair. */
+		change_count: i32,                 /**< Change count at iterator creation for modification detection. */
+	}
+} else {
+	ecs_map_iter_t :: struct {
+		_map:   ^ecs_map_t,          /**< The map being iterated. */
+		bucket: ^ecs_bucket_t,       /**< Current bucket. */
+		entry:  ^ecs_bucket_entry_t, /**< Current entry in the bucket. */
+		res:    ^ecs_map_data_t,     /**< Pointer to current key-value pair. */
+	}
 }
 
 /** General purpose allocator that manages block allocators for different sizes. */
@@ -1148,12 +1198,23 @@ ecs_var_t :: struct {
 }
 
 /** Cached reference. */
-ecs_ref_t :: struct {
-	entity:             ecs_entity_t, /* Entity. */
-	table_id:           u64,          /* Table ID for detecting ABA issues. */
-	table_version_fast: u32,          /* Fast change detection with false positives. */
-	table_version:      u16,          /* Change detection. */
-	ptr:                rawptr,       /* Cached component pointer. */
+when ODIN_DEBUG {
+	ecs_ref_t :: struct {
+		entity:             ecs_entity_t, /* Entity. */
+		table_id:           u64,          /* Table ID for detecting ABA issues. */
+		table_version_fast: u32,          /* Fast change detection with false positives. */
+		table_version:      u16,          /* Change detection. */
+		ptr:                rawptr,       /* Cached component pointer. */
+		id:                 ecs_entity_t, /* Component ID (debug only, used for asserts). */
+	}
+} else {
+	ecs_ref_t :: struct {
+		entity:             ecs_entity_t, /* Entity. */
+		table_id:           u64,          /* Table ID for detecting ABA issues. */
+		table_version_fast: u32,          /* Fast change detection with false positives. */
+		table_version:      u16,          /* Change detection. */
+		ptr:                rawptr,       /* Cached component pointer. */
+	}
 }
 
 /* Page-iterator-specific data. */

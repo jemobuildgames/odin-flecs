@@ -10,8 +10,9 @@
 *.dylib
 *.exp
 
-# The prebuilt release library is shipped with the bindings.
+# The prebuilt release/debug libraries are shipped with the bindings.
 !flecs.lib
+!flecs_d.lib
 
 build/
 

@@ -7,10 +7,11 @@ inputs = [
 
 // Write the Odin package directly to the repository root, so users can `import flecs "path/to/odin-flecs"`.
 output_folder = "."
-import_lib = "flecs.lib"
+imports_file = "bindgen/imports.odin"
 package_name = "flecs"
 
 // Generate against a release build of Flecs (no debug-only fields in structs).
+// `bindgen_debug.sjson` is the matching debug config.
 clang_defines = {
 	"FLECS_NDEBUG" = "1",
 }
